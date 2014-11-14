@@ -12,7 +12,7 @@ config=
   outputDirectory: process.env.FORK_OUTPUT ||
     process.env.TEMP ||
     process.env.TMPDIR
-  maxConcurrentRequests: 1
+  maxConcurrentRequests: 5
 
 app = express()
 app.use connect()
@@ -25,6 +25,9 @@ countOfCurrentlyExecutingRequests = 0
 createTempFileName = (prefix) ->
   prefix + process.pid + requestCounter++
 
+createTempFilePath = (prefix) ->
+  path.join config.outputDirectory, createTempFileName(prefix)
+
 executeThrottled = (req, res) ->
   if(countOfCurrentlyExecutingRequests < config.maxConcurrentRequests)
     log.debug 'executing request'
@@ -32,35 +35,36 @@ executeThrottled = (req, res) ->
     handleRequest(req,res).then(() -> countOfCurrentlyExecutingRequests--)
   else
     log.debug 'queueing request'
-    delayed = () -> executeThrottled(req, res)
-    setTimeout(delayed, 1)
+    handleLater = () -> executeThrottled(req, res)
+    setTimeout handleLater, 0
 
 app.use((req, res, next) -> executeThrottled(req, res))
+
+promiseYouWillOpen = (stream) ->
+  new Promise (resolve, reject) -> stream.on('open', resolve)
 
 handleRequest = (req,res) ->
   log.debug 'handling request to %s', req.path
   err = null
-  captureError = (e) -> err = e
   pathToHandler = path.join __dirname, "commands", req.path
-  outfilePath = path.join config.outputDirectory, createTempFileName('testsdout')
-  errfilePath = path.join config.outputDirectory, createTempFileName('testsderr')
+  outfilePath = createTempFilePath 'testsdout'
+  errfilePath = createTempFilePath 'testsderr'
   outfileStream = fs.createWriteStream outfilePath
   errfileStream = fs.createWriteStream errfilePath
-  handler = null
+
   removeTempFiles = () ->
     fs.unlink outfilePath, (e) -> log.warn(e) if e
     fs.unlink errfilePath, (e) -> log.warn(e) if e
     outfileStream.close()
     errfileStream.close()
-  outfileStreamOpened = new Promise (resolve, reject) ->
-    outfileStream.on 'open', resolve
-  errfileStreamOpened = new Promise (resolve, reject) ->
-    errfileStream.on 'open', resolve
+
+  outfileStreamOpened = promiseYouWillOpen outfileStream
+  errfileStreamOpened = promiseYouWillOpen errfileStream
   Promise.all([outfileStreamOpened, errfileStreamOpened]).then( () ->
     log.debug 'starting process: %s', pathToHandler
     handler = child_process.spawn(pathToHandler, [],
       stdio: ['pipe', outfileStream, errfileStream])
-    handler.on 'error', captureError
+    handler.on 'error', (e) -> err = e
     handler.stdin.on 'error', (e) ->
       res.type('application/json').status(500).send(message: e)
     handler.on 'close', (exitCode, signal) ->
@@ -77,10 +81,7 @@ handleRequest = (req,res) ->
         res.type 'application/json'
         fs.createReadStream(outfilePath).pipe(res)
     handler.stdin.end(JSON.stringify(
-      url: req.url,
-      query: req.query,
-      body: req.body,
-      headers: req.headers,
+      url: req.url, query: req.query, body: req.body, headers: req.headers,
       path: req.path
     ))
   ).catch (e) -> log.error(e)
