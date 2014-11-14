@@ -12,7 +12,7 @@ config=
   outputDirectory: process.env.FORK_OUTPUT ||
     process.env.TEMP ||
     process.env.TMPDIR
-  maxConcurrentRequests: 5
+  maxConcurrentRequests: process.env.MAX_CONCURRENCY || 5
 
 app = express()
 app.use connect()
@@ -58,9 +58,8 @@ handleRequest = (req,res) ->
     outfileStream.close()
     errfileStream.close()
 
-  outfileStreamOpened = promiseYouWillOpen outfileStream
-  errfileStreamOpened = promiseYouWillOpen errfileStream
-  Promise.all([outfileStreamOpened, errfileStreamOpened]).then( () ->
+  
+  Promise.all([promiseYouWillOpen(outfileStream), promiseYouWillOpen(errfileStream)]).then( () ->
     log.debug 'starting process: %s', pathToHandler
     handler = child_process.spawn(pathToHandler, [],
       stdio: ['pipe', outfileStream, errfileStream])
@@ -95,4 +94,5 @@ listenPort = process.env.PORT || 3000
 log.info "starting app " + process.env.APP_NAME
 log.info "listening on " + listenPort
 log.debug "debug logging enabled"
+log.debug config
 app.listen listenPort
