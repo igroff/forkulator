@@ -1,6 +1,5 @@
 express     = require 'express'
 morgan      = require 'morgan'
-cookieParser = require 'cookie-parser'
 connect     = require 'connect'
 log         = require 'simplog'
 path        = require 'path'
@@ -17,7 +16,6 @@ config=
 app = express()
 app.use connect()
 app.use morgan('combined')
-app.use cookieParser()
 
 requestCounter = 0
 countOfCurrentlyExecutingRequests = 0
@@ -58,14 +56,15 @@ handleRequest = (req,res) ->
     outfileStream.close()
     errfileStream.close()
 
-  
   Promise.all([promiseYouWillOpen(outfileStream), promiseYouWillOpen(errfileStream)]).then( () ->
     log.debug 'starting process: %s', pathToHandler
+    # we're gonna do our best to return json in all cases
+    res.type('application/json')
     handler = child_process.spawn(pathToHandler, [],
       stdio: ['pipe', outfileStream, errfileStream])
     handler.on 'error', (e) -> err = e
     handler.stdin.on 'error', (e) ->
-      res.type('application/json').status(500).send(message: e)
+      res.status(500).send(message: e)
     handler.on 'close', (exitCode, signal) ->
       if exitCode != 0 || err || signal
         res.status 500
@@ -77,13 +76,15 @@ handleRequest = (req,res) ->
         errStream.on 'error', (e) -> res.write('there was trouble reading error output from the process ' + e)
         errStream.pipe res, end:false
       else
-        res.type 'application/json'
         fs.createReadStream(outfilePath).pipe(res)
     handler.stdin.end(JSON.stringify(
       url: req.url, query: req.query, body: req.body, headers: req.headers,
       path: req.path
     ))
-  ).catch (e) -> log.error(e)
+  ).catch (e) ->
+    log.error(e)
+    res.send "something awful happend: " + e
+
   new Promise (resolve, reject) ->
     shutDown = () ->
       removeTempFiles()

@@ -4,7 +4,7 @@
   "description": "A web application using express and stuff",
   "main": "server.js",
   "scripts": {
-    "start": "export APP_NAME=${APP_NAME-$(basename `pwd`)}; test -r ~/.${APP_NAME}.env && . ~/.${APP_NAME}.env ; node server.js",
+    "start": "export APP_NAME=${APP_NAME-$(basename `pwd`)}; test -r ~/.${APP_NAME}.env && . ~/.${APP_NAME}.env ; ./node_modules/.bin/coffee server.coffee",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
