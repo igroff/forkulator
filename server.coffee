@@ -12,7 +12,7 @@ config=
   outputDirectory: process.env.FORK_OUTPUT ||
     process.env.TEMP ||
     process.env.TMPDIR
-  maxConcurrentRequests: 5
+  maxConcurrentRequests: 1
 
 app = express()
 app.use connect()
@@ -26,13 +26,14 @@ createTempFileName = (prefix) ->
   prefix + process.pid + requestCounter++
 
 executeThrottled = (req, res) ->
-  if countOfCurrentlyExecutingRequests < config.maxConcurrentRequests
+  if(countOfCurrentlyExecutingRequests < config.maxConcurrentRequests)
     log.debug 'executing request'
     countOfCurrentlyExecutingRequests++
-    handleRequest(req,res).then(countOfCurrentlyExecutingRequests--)
+    handleRequest(req,res).then(() -> countOfCurrentlyExecutingRequests--)
   else
     log.debug 'queueing request'
-    setTimeout 0, () -> executeThrottled(req,res)
+    delayed = () -> executeThrottled(req, res)
+    setTimeout(delayed, 1)
 
 app.use((req, res, next) -> executeThrottled(req, res))
 
@@ -49,8 +50,8 @@ handleRequest = (req,res) ->
   removeTempFiles = () ->
     fs.unlink outfilePath, (e) -> log.warn(e) if e
     fs.unlink errfilePath, (e) -> log.warn(e) if e
-    outfileStream.close
-    errfileStream.close
+    outfileStream.close()
+    errfileStream.close()
   outfileStreamOpened = new Promise (resolve, reject) ->
     outfileStream.on 'open', resolve
   errfileStreamOpened = new Promise (resolve, reject) ->
@@ -68,7 +69,7 @@ handleRequest = (req,res) ->
         res.write '{"message":"'
         res.write err + "" if err
         res.write "killed by signal" + signal if signal
-        errStream = fs.createReadStream errFilePath
+        errStream = fs.createReadStream errfilePath
         errStream.on 'end', -> res.end('"}')
         errStream.on 'error', (e) -> res.write('there was trouble reading error output from the process ' + e)
         errStream.pipe res, end:false
@@ -84,7 +85,10 @@ handleRequest = (req,res) ->
     ))
   ).catch (e) -> log.error(e)
   new Promise (resolve, reject) ->
-    res.on 'finish', -> removeTempFiles(); resolve()
+    shutDown = () ->
+      removeTempFiles()
+      resolve()
+    res.on 'finish', shutDown
     
 listenPort = process.env.PORT || 3000
 log.info "starting app " + process.env.APP_NAME
