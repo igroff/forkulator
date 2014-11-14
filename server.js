@@ -1,9 +1,7 @@
 var express         = require('express');
 var morgan          = require('morgan');
 var cookieParser    = require('cookie-parser');
-var bodyParser      = require('body-parser');
 var connect         = require('connect');
-var connectTimeout  = require('connect-timeout');
 var log             = require('simplog');
 var child_process   = require('child_process');
 var path            = require('path');
@@ -13,7 +11,8 @@ var Promise         = require('bluebird');
 config = {
   outputDirectory: process.env.FORK_OUTPUT
     || process.env.TEMP
-    || process.env.TMPDIR
+    || process.env.TMPDIR,
+  maxConcurrentRequests: 5
 }
 
 var app = express();
@@ -21,12 +20,6 @@ var app = express();
 app.use(connect());
 app.use(morgan('combined'));
 app.use(cookieParser());
-// parse application/x-www-form-urlencoded
-app.use(bodyParser.urlencoded({ extended: false }))
-// parse application/json
-app.use(bodyParser.json())
-// parse application/vnd.api+json as json
-app.use(bodyParser.json({ type: 'application/vnd.api+json' }))
 
 var requestCounter = 0;
 /* this just needs to generate something like a unique file name */
@@ -34,25 +27,23 @@ function createTempFileName(prefix){
   return prefix + process.pid + requestCounter++;
 }
 
-var counterAgain = 0;
 var countOfCurrentlyExecutingRequests = 0;
 function executeThrottled(req, res){
-  if (countOfCurrentlyExecutingRequests < 5){
+  if (countOfCurrentlyExecutingRequests < config.maxConcurrentRequests){
     countOfCurrentlyExecutingRequests++;
     handleRequest(req, res).then(countOfCurrentlyExecutingRequests--);  
   } else {
    setTimeout(0, function() { executeThrottled(req, res); });
   }
 }
-// respond
+
 app.use(function(req, res, next){
   executeThrottled(req,res);
 });
+
 function handleRequest(req, res){
   var err = null;
   function captureError(e) { err = e; }
-  var response = null;
-  var thisRequest = counterAgain++;
   var pathToHandler = path.join(__dirname, "commands", req.path);
   var outfilePath = path.join(config.outputDirectory, createTempFileName('testsdout'));
   var errfilePath = path.join(config.outputDirectory, createTempFileName('testsderr'));
@@ -62,10 +53,9 @@ function handleRequest(req, res){
   function removeTempFiles(){
     fs.unlink(outfilePath, function(e) {if (e){ log.warn(e);}});
     fs.unlink(errfilePath, function(e) {if (e){ log.warn(e);}});
+    outfileStream.close();
+    errfileStream.close();
   };
-  var promiseIllFinish = new Promise(function(resolve, reject){
-    res.on('finish', function(){ removeTempFiles(); resolve(); });
-  })
   outfileStreamOpened = new Promise(function(resolve, reject){
     outfileStream.on('open', resolve);
   });
@@ -106,7 +96,9 @@ function handleRequest(req, res){
       path:req.path
     }));
   }).catch(function(e) { log.error(e); });
-  return promiseIllFinish;
+  return new Promise(function(resolve, reject){
+    res.on('finish', function(){ removeTempFiles(); resolve(); });
+  })
 }
 
 listenPort = process.env.PORT || 3000;
