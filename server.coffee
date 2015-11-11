@@ -16,7 +16,7 @@ config=
     process.env.TEMP ||
     process.env.TMPDIR || dieInAFire 'I could not find a place to write my output'
   maxConcurrentRequests: process.env.MAX_CONCURRENCY || 5
-  commandPath: process.env.COMMAND_PATH || path.join process.__directory, "commands"
+  commandPath: process.env.COMMAND_PATH || path.join __dirname, "commands"
 
 app = express()
 app.use connect()
