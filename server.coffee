@@ -7,11 +7,16 @@ fs          = require 'fs'
 Promise     = require 'bluebird'
 child_process = require 'child_process'
 
+dieInAFire = (message, errorCode=1) ->
+  log.error message
+  process.exit errorCode
+
 config=
   outputDirectory: process.env.FORK_OUTPUT ||
     process.env.TEMP ||
-    process.env.TMPDIR
+    process.env.TMPDIR || dieInAFire 'I could not find a place to write my output'
   maxConcurrentRequests: process.env.MAX_CONCURRENCY || 5
+  commandPath: process.env.COMMAND_PATH || path.join process.__directory, "commands"
 
 app = express()
 app.use connect()
@@ -44,7 +49,7 @@ promiseYouWillOpen = (stream) ->
 handleRequest = (req,res) ->
   log.debug 'handling request to %s', req.path
   err = null
-  pathToHandler = path.join __dirname, "commands", req.path
+  pathToHandler = path.join config.commandPath, req.path
   outfilePath = createTempFilePath 'testsdout'
   errfilePath = createTempFilePath 'testsderr'
   outfileStream = fs.createWriteStream outfilePath
