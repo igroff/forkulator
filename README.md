@@ -29,7 +29,7 @@ via stdin.
 
 Here is an example of a command that echoes out stdin, and the response it generates:
 
-First the contents of a command called `echoStdin':
+First the contents of a command called `echoStdin`:
 
         #! /usr/bin/env bash
         cat
