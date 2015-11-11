@@ -12,7 +12,7 @@ dieInAFire = (message, errorCode=1) ->
   process.exit errorCode
 
 config=
-  outputDirectory: process.env.FORK_OUTPUT ||
+  outputDirectory: process.env.FORKULATOR_TEMP ||
     process.env.TEMP ||
     process.env.TMPDIR || dieInAFire 'I could not find a place to write my output'
   maxConcurrentRequests: process.env.MAX_CONCURRENCY || 5
@@ -43,8 +43,10 @@ executeThrottled = (req, res) ->
 
 app.use((req, res, next) -> executeThrottled(req, res))
 
-promiseYouWillOpen = (stream) ->
-  new Promise (resolve, reject) -> stream.on('open', resolve)
+promiseToOpen = (stream) ->
+  new Promise (resolve, reject) ->
+    stream.on 'open', resolve
+    stream.on 'error', reject
 
 handleRequest = (req,res) ->
   log.debug 'handling request to %s', req.path
@@ -61,7 +63,7 @@ handleRequest = (req,res) ->
     outfileStream.close()
     errfileStream.close()
 
-  Promise.all([promiseYouWillOpen(outfileStream), promiseYouWillOpen(errfileStream)]).then( () ->
+  Promise.all([promiseToOpen(outfileStream), promiseToOpen(errfileStream)]).then( () ->
     log.debug 'starting process: %s', pathToHandler
     # we're gonna do our best to return json in all cases
     res.type('application/json')
@@ -82,10 +84,13 @@ handleRequest = (req,res) ->
         errStream.pipe res, end:false
       else
         fs.createReadStream(outfilePath).pipe(res)
-    handler.stdin.end(JSON.stringify(
-      url: req.url, query: req.query, body: req.body, headers: req.headers,
+    handler.stdin.end JSON.stringify(
+      url: req.url
+      query: req.query
+      body: req.body
+      headers: req.headers
       path: req.path
-    ))
+    )
   ).catch (e) ->
     log.error(e)
     res.send "something awful happend: " + e
