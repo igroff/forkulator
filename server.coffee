@@ -6,7 +6,7 @@ path        = require 'path'
 fs          = require 'fs'
 Promise     = require 'bluebird'
 child_process = require 'child_process'
-streamReplace = require 'stream-replace'
+through = require 'through'
 
 dieInAFire = (message, errorCode=1) ->
   log.error message
@@ -33,14 +33,13 @@ createTempFilePath = (prefix) ->
   path.join config.outputDirectory, createTempFileName(prefix)
 
 executeThrottled = (req, res) ->
-  if(countOfCurrentlyExecutingRequests < config.maxConcurrentRequests)
+  if config.maxConcurrentRequests is -1 || (countOfCurrentlyExecutingRequests < config.maxConcurrentRequests)
     log.debug 'executing request'
     countOfCurrentlyExecutingRequests++
     handleRequest(req,res).then(() -> countOfCurrentlyExecutingRequests--)
   else
-    log.debug 'queueing request'
-    handleLater = () -> executeThrottled(req, res)
-    setTimeout handleLater, 0
+    log.warn "too busy to handle request"
+    res.status(503).send(message: "too busy, try again later")
 
 app.use((req, res, next) -> executeThrottled(req, res))
 
@@ -49,18 +48,17 @@ promiseToOpen = (stream) ->
     stream.on 'open', resolve
     stream.on 'error', reject
 
-promiseToReadToEnd = (stream) ->
+promiseToEnd = (stream) ->
   new Promise (resolve, reject) ->
     stream.on 'end', resolve
     stream.on 'error', reject
-    
 
 handleRequest = (req,res) ->
   log.debug 'handling request to %s', req.path
   err = null
   pathToHandler = path.join config.commandPath, req.path
-  outfilePath = createTempFilePath 'testsdout'
-  errfilePath = createTempFilePath 'testsderr'
+  outfilePath = createTempFilePath 'stdout-'
+  errfilePath = createTempFilePath 'stderr-'
   outfileStream = fs.createWriteStream outfilePath
   errfileStream = fs.createWriteStream errfilePath
 
@@ -69,6 +67,13 @@ handleRequest = (req,res) ->
     fs.unlink errfilePath, (e) -> log.warn(e) if e
     outfileStream.close()
     errfileStream.close()
+
+  createStreamTransform = () ->
+    through((data) ->
+      this.emit 'data', data.toString().replace(/\n/g, "\\n"),
+      null,
+      autoDestroy: false
+    )
 
   Promise.all([promiseToOpen(outfileStream), promiseToOpen(errfileStream)]).then( () ->
     log.debug 'starting process: %s', pathToHandler
@@ -89,15 +94,11 @@ handleRequest = (req,res) ->
         errStream.on 'error', (e) -> res.write 'error reading stderr from the command ' + e + '\\n'
         outStream = fs.createReadStream outfilePath
         outStream.on 'error', (e) -> res.write 'error reading stdout from the command ' + e + '\\n'
-        errStream
-          .pipe(streamReplace(/\n/g, "\\n"))
-          .pipe(res, end: false)
-        outStream
-          .pipe(streamReplace(/\n/g, "\\n"))
-          .pipe(res, end: false)
-        promiseToReadToEnd(errStream)
-        .then(promiseToReadToEnd(outStream))
-        .then(() -> res.end('"}'))
+        errStream.pipe(createStreamTransform()).pipe(res, end: false)
+        outStream.pipe(createStreamTransform()).pipe(res, end: false)
+        promiseToEnd(errStream)
+          .then(promiseToEnd(outStream))
+          .then( -> res.end('"}'))
       else
         fs.createReadStream(outfilePath).pipe(res)
     # provide our information to the handler on stdin

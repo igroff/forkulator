@@ -1,0 +1,10 @@
+{
+  "url": "/echoStdin",
+  "query": {},
+  "headers": {
+    "host": "localhost:3000",
+    "accept": "*/*",
+    "user-agent": "test pants"
+  },
+  "path": "/echoStdin"
+}

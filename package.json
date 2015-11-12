@@ -10,21 +10,15 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "bluebird": "^2.3.11",
-    "coffee-script": "^1.8.0",
+    "bluebird": "3.0.5",
+    "coffee-script": "1.8.0",
     "connect": "3.1.1",
     "express": "4.8.6",
     "morgan": "1.2.3",
-    "simplog": "0.1.0"
+    "simplog": "0.1.0",
+    "through": "2.3.8"
   },
   "devDependencies": {
-    "http-server": "^0.6.1",
-    "supervisor": "^0.6.0",
-    "gulp": "^3.8.6",
-    "gulp-concat": "^2.3.4",
-    "gulp-coffee": "^2.1.1",
-    "gulp-sourcemaps": "^1.1.0",
-    "gulp-uglify": "^0.3.1",
-    "gulp-imagemin": "^0.6.2"
+    "supervisor": "0.6.0"
   }
 }

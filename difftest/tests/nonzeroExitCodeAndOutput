@@ -1,0 +1,6 @@
+#! /usr/bin/env bash
+# the output order of the stdio streams is nondeterministic, so to make the 
+# test deterministic we check to see that it contains the stdio indicators
+# at all regardless of order
+curl http://localhost:3000/nonzeroExitCodeAndOutput --silent | grep stderr > /dev/null && echo stderr
+curl http://localhost:3000/nonzeroExitCodeAndOutput --silent | grep stdout > /dev/null && echo stdout

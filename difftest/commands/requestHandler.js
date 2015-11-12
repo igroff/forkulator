@@ -10,9 +10,8 @@ process.stdin.on('data', function(d){
   input = input + d;
 });
 
-process.stdin.on('finish', function(){
+process.stdin.on('end', function(){
   // the data that is coming in on stdin is guaranteed to be valid JSON
   input = JSON.parse(input);
-  console.log("received: " + util.inspect(input));
-  console.log("handled by " + process.pid + "!");
+  console.log(util.inspect(input));
 });

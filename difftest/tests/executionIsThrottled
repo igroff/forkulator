@@ -1,0 +1,15 @@
+#! /usr/bin/env bash
+curl http://localhost:3000/requestHandlerSleeper --silent | jq . &
+sleep .1
+curl http://localhost:3000/requestHandlerSleeper --silent  | jq . &
+sleep .1
+curl http://localhost:3000/requestHandlerSleeper --silent  | jq . &
+sleep .1
+curl http://localhost:3000/requestHandlerSleeper --silent  | jq . &
+sleep .1
+curl http://localhost:3000/requestHandlerSleeper --silent  | jq . &
+sleep .1
+curl http://localhost:3000/requestHandlerSleeper --silent  | jq . &
+sleep .1
+curl http://localhost:3000/echoStdin --silent | jq .
+wait
