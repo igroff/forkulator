@@ -6,6 +6,7 @@ path        = require 'path'
 fs          = require 'fs'
 Promise     = require 'bluebird'
 child_process = require 'child_process'
+streamReplace = require 'stream-replace'
 
 dieInAFire = (message, errorCode=1) ->
   log.error message
@@ -48,6 +49,12 @@ promiseToOpen = (stream) ->
     stream.on 'open', resolve
     stream.on 'error', reject
 
+promiseToReadToEnd = (stream) ->
+  new Promise (resolve, reject) ->
+    stream.on 'end', resolve
+    stream.on 'error', reject
+    
+
 handleRequest = (req,res) ->
   log.debug 'handling request to %s', req.path
   err = null
@@ -79,11 +86,21 @@ handleRequest = (req,res) ->
         res.write err + "" if err
         res.write "killed by signal" + signal if signal
         errStream = fs.createReadStream errfilePath
-        errStream.on 'end', -> res.end('"}')
-        errStream.on 'error', (e) -> res.write('there was trouble reading error output from the process ' + e)
-        errStream.pipe res, end:false
+        errStream.on 'error', (e) -> res.write 'error reading stderr from the command ' + e + '\\n'
+        outStream = fs.createReadStream outfilePath
+        outStream.on 'error', (e) -> res.write 'error reading stdout from the command ' + e + '\\n'
+        errStream
+          .pipe(streamReplace(/\n/g, "\\n"))
+          .pipe(res, end: false)
+        outStream
+          .pipe(streamReplace(/\n/g, "\\n"))
+          .pipe(res, end: false)
+        promiseToReadToEnd(errStream)
+        .then(promiseToReadToEnd(outStream))
+        .then(() -> res.end('"}"'))
       else
         fs.createReadStream(outfilePath).pipe(res)
+    # provide our information to the handler on stdin
     handler.stdin.end JSON.stringify(
       url: req.url
       query: req.query
