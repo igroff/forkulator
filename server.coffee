@@ -97,7 +97,7 @@ handleRequest = (req,res) ->
           .pipe(res, end: false)
         promiseToReadToEnd(errStream)
         .then(promiseToReadToEnd(outStream))
-        .then(() -> res.end('"}"'))
+        .then(() -> res.end('"}'))
       else
         fs.createReadStream(outfilePath).pipe(res)
     # provide our information to the handler on stdin
