@@ -113,6 +113,8 @@ handleRequest = (req,res) ->
     log.error(e)
     res.send "something awful happend: " + e
 
+  # when our response is finished (we've sent all we will send)
+  # we clean up after ourselves
   new Promise (resolve, reject) ->
     shutDown = () ->
       removeTempFiles()
