@@ -1,7 +1,0 @@
-{ url: '/requestHandler.js',
-  query: {},
-  headers: 
-   { host: 'localhost:3000',
-     accept: '*/*',
-     'user-agent': 'test pants' },
-  path: '/requestHandler.js' }
