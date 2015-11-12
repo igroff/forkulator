@@ -39,7 +39,7 @@ executeThrottled = (req, res) ->
     handleRequest(req,res).then(() -> countOfCurrentlyExecutingRequests--)
   else
     log.warn "too busy to handle request"
-    res.status(503).send(message: "too busy, try again later")
+    res.status(503).send(message: "too busy, try again later").end()
 
 app.use((req, res, next) -> executeThrottled(req, res))
 
