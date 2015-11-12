@@ -1,3 +1,4 @@
 #! /usr/bin/env bash
-echo -n "Shit to error" >&2
+echo "This message was written to stdout"
+echo -n "This message was written to stderr" >&2
 exit 1

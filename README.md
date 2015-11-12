@@ -12,6 +12,16 @@ Enter `forkulator` the application that just runs your executable files and retu
   environment variable.
 * command path - Full path to the directory holding forkulator commands.
 
+#### Things to know
+
+* Commands do have access to the environment that forkulator itself sees, that's a feature
+  so don't abuse it.
+* forkulator really expects you to return valid JSON, so it will always set the content type of
+  the response to 'application/json'
+* if your command returns anything other than an exit code of 0, forkulator assumes it has failed.
+  In the case of failure a JSON object containing the output of your command will be returned, see
+  'Commands' below for an example.
+
 #### Configuration (Environment Variables)
 
 * `COMMAND_PATH` - Full path to the directory where your commands are stored
@@ -61,3 +71,6 @@ You can even put your commands in a directory within the configured command path
           },
           "path": "/subdir/echoStdin"
         }
+
+If your command exits with a non zero exit code:
+
