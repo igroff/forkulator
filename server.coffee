@@ -9,6 +9,7 @@ through     = require 'through'
 _           = require 'lodash'
 child_process = require 'child_process'
 body_parser   = require 'body-parser'
+util          = require 'util'
 
 dieInAFire = (message, errorCode=1) ->
   log.error message
@@ -28,66 +29,78 @@ app.use connect()
 app.use body_parser.text(type: () -> true)
 app.use morgan('combined')
 
+# used to uniquely identify requests throughout the lifetime of forkulator
 requestCounter = 0
+# used to count active requests so throttling, if desired, can be done
 countOfCurrentlyExecutingRequests = 0
 
 createTempFileName = (prefix) ->
-  prefix + process.pid + requestCounter++
+  prefix + process.pid + (++requestCounter + "")
 
 createTempFilePath = (prefix) ->
   path.join config.outputDirectory, createTempFileName(prefix)
 
 executeThrottled = (req, res) ->
+  # if we've not disabled throttling ( set to -1 ) then we see that we're running no
+  # more than our maximum allowed concurrent requests
   if config.maxConcurrentRequests is -1 || (countOfCurrentlyExecutingRequests < config.maxConcurrentRequests)
     log.debug 'executing request'
     countOfCurrentlyExecutingRequests++
     handleRequest(req,res).then(() -> countOfCurrentlyExecutingRequests--)
   else
+    # deny execution of request, tell caller to try again
     log.warn "too busy to handle request"
     res.status(503).send(message: "too busy, try again later").end()
 
 app.use((req, res, next) -> executeThrottled(req, res))
 
-promiseToOpen = (stream) ->
-  new Promise (resolve, reject) ->
-    stream.on 'open', resolve
-    stream.on 'error', reject
-
 promiseToEnd = (stream) ->
   new Promise (resolve, reject) ->
-    stream.on 'end', resolve
+    stream.on 'end', () -> resolve(stream)
+    stream.on 'error', reject
+
+promiseToOpenForWriting = (path) ->
+  stream = fs.createWriteStream(path)
+  new Promise (resolve, reject) ->
+    stream.on 'open', () -> resolve(stream)
     stream.on 'error', reject
 
 handleRequest = (req,res) ->
-  log.debug 'handling request to %s', req.path
   err = null
   pathToHandler = path.join config.commandPath, req.path
   outfilePath = createTempFilePath 'stdout-'
   errfilePath = createTempFilePath 'stderr-'
-  outfileStream = fs.createWriteStream outfilePath
-  errfileStream = fs.createWriteStream errfilePath
 
   removeTempFiles = () ->
     fs.unlink outfilePath, (e) -> log.warn(e) if e
     fs.unlink errfilePath, (e) -> log.warn(e) if e
-    outfileStream.close()
-    errfileStream.close()
 
   createStreamTransform = () ->
-    through((data) ->
+    through (data) ->
       this.emit 'data', data.toString().replace(/\n/g, "\\n"),
       null,
       autoDestroy: false
-    )
 
-  Promise.all([promiseToOpen(outfileStream), promiseToOpen(errfileStream)]).then( () ->
+  stdinString = JSON.stringify(
+    url: req.url
+    query: if _.isEmpty(req.query) then null else req.query
+    body: if _.isEmpty(req.body) then null else req.body
+    headers: req.headers
+    path: req.path
+  )
+
+  Promise.all [promiseToOpenForWriting(outfilePath), promiseToOpenForWriting(errfilePath)]
+  .spread( (outfileStream, errfileStream) ->
     log.debug 'starting process: %s', pathToHandler
     # we're gonna do our best to return json in all cases
     res.type('application/json')
     handler = child_process.spawn(pathToHandler, [], stdio: ['pipe', outfileStream, errfileStream])
     handler.on 'error', (e) -> err = e
     handler.stdin.on 'error', (e) -> res.status(500).send(message: e)
+    # feed our data to the handler
+    handler.stdin.end stdinString
     handler.on 'close', (exitCode, signal) ->
+      log.debug "command completed exit code #{exitCode}"
       if exitCode != 0 || err || signal
         res.status 500
         res.write '{"message":"'
@@ -104,17 +117,9 @@ handleRequest = (req,res) ->
           .then( -> res.end('"}'))
       else
         fs.createReadStream(outfilePath).pipe(res)
-    # provide our information to the handler on stdin
-    handler.stdin.end JSON.stringify(
-      url: req.url
-      query: if _.isEmpty(req.query) then null else req.query
-      body: if _.isEmpty(req.body) then null else req.body
-      headers: req.headers
-      path: req.path
-    )
   ).catch (e) ->
-    log.error(e)
-    res.send "something awful happend: " + e
+    log.error "something awful happened #{e}\n#{e.stack}"
+    res.end "something awful happend: " + e
 
   # when our response is finished (we've sent all we will send)
   # we clean up after ourselves
