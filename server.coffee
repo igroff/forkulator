@@ -35,12 +35,13 @@ requestCounter = 0
 countOfCurrentlyExecutingRequests = 0
 
 createTempFileName = (prefix) ->
-  prefix + process.pid + (++requestCounter + "")
+  prefix + process.pid + requestCounter + ""
 
 createTempFilePath = (prefix) ->
   path.join config.outputDirectory, createTempFileName(prefix)
 
 executeThrottled = (req, res) ->
+  requestCounter++
   # if we've not disabled throttling ( set to -1 ) then we see that we're running no
   # more than our maximum allowed concurrent requests
   if config.maxConcurrentRequests is -1 || (countOfCurrentlyExecutingRequests < config.maxConcurrentRequests)
@@ -68,12 +69,6 @@ promiseToOpenForWriting = (path) ->
 handleRequest = (req,res) ->
   err = null
   pathToHandler = path.join config.commandPath, req.path
-  outfilePath = createTempFilePath 'stdout-'
-  errfilePath = createTempFilePath 'stderr-'
-
-  removeTempFiles = () ->
-    fs.unlink outfilePath, (e) -> log.warn(e) if e
-    fs.unlink errfilePath, (e) -> log.warn(e) if e
 
   createStreamTransform = () ->
     through (data) ->
@@ -81,34 +76,36 @@ handleRequest = (req,res) ->
       null,
       autoDestroy: false
 
-  stdinString = JSON.stringify(
+  stdinString = JSON.stringify
     url: req.url
     query: if _.isEmpty(req.query) then null else req.query
     body: if _.isEmpty(req.body) then null else req.body
     headers: req.headers
     path: req.path
-  )
 
-  Promise.all [promiseToOpenForWriting(outfilePath), promiseToOpenForWriting(errfilePath)]
-  .spread( (outfileStream, errfileStream) ->
+  Promise.all [promiseToOpenForWriting(createTempFilePath 'stdout-'), promiseToOpenForWriting(createTempFilePath 'stderr-')]
+  .spread (outfileStream, errfileStream) ->
     log.debug 'starting process: %s', pathToHandler
     # we're gonna do our best to return json in all cases
     res.type('application/json')
     handler = child_process.spawn(pathToHandler, [], stdio: ['pipe', outfileStream, errfileStream])
     handler.on 'error', (e) -> err = e
-    handler.stdin.on 'error', (e) -> res.status(500).send(message: e)
+    handler.stdin.on 'error', (e) ->
+      log.error "stdin error #{e}"
+      res.status(500).send(message: e)
     # feed our data to the handler
     handler.stdin.end stdinString
     handler.on 'close', (exitCode, signal) ->
+      #handler.stdin.removeAllListeners 'error'
       log.debug "command completed exit code #{exitCode}"
       if exitCode != 0 || err || signal
         res.status 500
         res.write '{"message":"'
         res.write err + "" if err
         res.write "killed by signal" + signal if signal
-        errStream = fs.createReadStream errfilePath
+        errStream = fs.createReadStream errfileStream.path
         errStream.on 'error', (e) -> res.write 'error reading stderr from the command ' + e + '\\n'
-        outStream = fs.createReadStream outfilePath
+        outStream = fs.createReadStream outfileStream.path
         outStream.on 'error', (e) -> res.write 'error reading stdout from the command ' + e + '\\n'
         errStream.pipe(createStreamTransform()).pipe(res, end: false)
         outStream.pipe(createStreamTransform()).pipe(res, end: false)
@@ -116,18 +113,17 @@ handleRequest = (req,res) ->
           .then(promiseToEnd(outStream))
           .then( -> res.end('"}'))
       else
-        fs.createReadStream(outfilePath).pipe(res)
-  ).catch (e) ->
+        fs.createReadStream(outfileStream.path).pipe(res)
+    # when our response is finished (we've sent all we will send)
+    # we clean up after ourselves
+    new Promise (resolve, reject) ->
+      res.on 'finish', () -> resolve([errfileStream.path, outfileStream.path])
+  .spread (errfilePath, outfilePath) ->
+    fs.unlink(outfilePath, (e) -> log.warn(e) if e)
+    fs.unlink(errfilePath, (e) -> log.warn(e) if e)
+  .catch (e) ->
     log.error "something awful happened #{e}\n#{e.stack}"
     res.end "something awful happend: " + e
-
-  # when our response is finished (we've sent all we will send)
-  # we clean up after ourselves
-  new Promise (resolve, reject) ->
-    shutDown = () ->
-      removeTempFiles()
-      resolve()
-    res.on 'finish', shutDown
     
 listenPort = process.env.PORT || 3000
 log.info "starting app " + process.env.APP_NAME
