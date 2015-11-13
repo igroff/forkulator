@@ -55,16 +55,16 @@ executeThrottled = (req, res) ->
 
 app.use((req, res, next) -> executeThrottled(req, res))
 
-promiseToEnd = (stream) ->
+waitForEvent = (resolveEvent, emitter, rejectEvent='error') ->
   new Promise (resolve, reject) ->
-    stream.on 'end', () -> resolve(stream)
-    stream.on 'error', reject
+    emitter.on resolveEvent, () -> resolve(emitter)
+    emitter.on rejectEvent, reject if rejectEvent
+
+promiseToEnd = (stream) ->
+  waitForEvent 'end', stream
 
 promiseToOpenForWriting = (path) ->
-  stream = fs.createWriteStream(path)
-  new Promise (resolve, reject) ->
-    stream.on 'open', () -> resolve(stream)
-    stream.on 'error', reject
+  waitForEvent 'open', fs.createWriteStream(path)
 
 handleRequest = (req,res) ->
   err = null
