@@ -4,7 +4,8 @@ COMMAND_PATH=$(PWD)/difftest/commands
 APP_NAME?=$(shell basename `pwd`)
 export FORKULATOR_TEMP=$(PWD)/temp
 watch:
-	DEBUG=true COMMAND_PATH=$(COMMAND_PATH) MAX_CONCURRENCY=1 mkdir -p $(FORKULATOR_TEMP) && ./node_modules/.bin/supervisor --watch 'src/,./' --ignore "./test"  -e "litcoffee,coffee,js" --exec make run-server
+	@mkdir -p $(FORKULATOR_TEMP)
+	DEBUG=true COMMAND_PATH=$(COMMAND_PATH) MAX_CONCURRENCY=1 ./node_modules/.bin/supervisor --watch 'src/,./' --ignore "./test"  -e "litcoffee,coffee,js" --exec make run-server
 
 lint:
 	find ./src -name '*.coffee' | xargs ./node_modules/.bin/coffeelint -f ./etc/coffeelint.conf

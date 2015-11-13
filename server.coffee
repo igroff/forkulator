@@ -5,8 +5,10 @@ log         = require 'simplog'
 path        = require 'path'
 fs          = require 'fs'
 Promise     = require 'bluebird'
+through     = require 'through'
+_           = require 'lodash'
 child_process = require 'child_process'
-through = require 'through'
+body_parser   = require 'body-parser'
 
 dieInAFire = (message, errorCode=1) ->
   log.error message
@@ -21,6 +23,9 @@ config=
 
 app = express()
 app.use connect()
+# simply parse all bodies as string so we can pass whatever it
+# is to the command
+app.use body_parser.text(type: () -> true)
 app.use morgan('combined')
 
 requestCounter = 0
@@ -79,11 +84,9 @@ handleRequest = (req,res) ->
     log.debug 'starting process: %s', pathToHandler
     # we're gonna do our best to return json in all cases
     res.type('application/json')
-    handler = child_process.spawn(pathToHandler, [],
-      stdio: ['pipe', outfileStream, errfileStream])
+    handler = child_process.spawn(pathToHandler, [], stdio: ['pipe', outfileStream, errfileStream])
     handler.on 'error', (e) -> err = e
-    handler.stdin.on 'error', (e) ->
-      res.status(500).send(message: e)
+    handler.stdin.on 'error', (e) -> res.status(500).send(message: e)
     handler.on 'close', (exitCode, signal) ->
       if exitCode != 0 || err || signal
         res.status 500
@@ -104,8 +107,8 @@ handleRequest = (req,res) ->
     # provide our information to the handler on stdin
     handler.stdin.end JSON.stringify(
       url: req.url
-      query: req.query
-      body: req.body
+      query: if _.isEmpty(req.query) then null else req.query
+      body: if _.isEmpty(req.body) then null else req.body
       headers: req.headers
       path: req.path
     )
