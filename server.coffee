@@ -10,6 +10,7 @@ _           = require 'lodash'
 child_process = require 'child_process'
 body_parser   = require 'body-parser'
 util          = require 'util'
+stream        = require 'stream'
 
 dieInAFire = (message, errorCode=1) ->
   log.error message
@@ -63,12 +64,22 @@ waitForEvent = (resolveEvent, emitter, rejectEvent='error') ->
 promiseToEnd = (stream) ->
   waitForEvent 'end', stream
 
-promiseToOpenForWriting = (path) ->
+openForWrite = (path) ->
   waitForEvent 'open', fs.createWriteStream(path)
+
+openForRead = (path) ->
+  waitForEvent 'open', fs.createReadStream(path)
+
+writeAndClose = (data, stream) ->
+  stream.end data
+  waitForEvent 'close', stream
 
 handleRequest = (req,res) ->
   err = null
   pathToHandler = path.join config.commandPath, req.path
+  #
+  # we're gonna do our best to return json in all cases
+  res.type('application/json')
 
   createStreamTransform = () ->
     through (data) ->
@@ -83,21 +94,21 @@ handleRequest = (req,res) ->
     headers: req.headers
     path: req.path
 
-  Promise.all [promiseToOpenForWriting(createTempFilePath 'stdout-'), promiseToOpenForWriting(createTempFilePath 'stderr-')]
-  .spread (outfileStream, errfileStream) ->
+  logit = (message) ->
+    (thing) ->
+      log.debug "#{message} #{util.inspect(thing)}"
+      Promise.resolve(thing)
+
+  openForWrite(createTempFilePath 'stdin-')
+  .then (stdinfileStream) -> writeAndClose(stdinString, stdinfileStream)
+  .then((stdinWriteStream) -> Promise.all [openForRead(stdinWriteStream.path), openForWrite(createTempFilePath 'stdout-'), openForWrite(createTempFilePath 'stderr-')])
+  .spread (stdinfileStream, outfileStream, errfileStream) ->
     log.debug 'starting process: %s', pathToHandler
-    # we're gonna do our best to return json in all cases
-    res.type('application/json')
     handler = child_process.spawn(pathToHandler, [], stdio: ['pipe', outfileStream, errfileStream])
     handler.on 'error', (e) -> err = e
-    handler.stdin.on 'error', (e) ->
-      log.error "stdin error #{e}"
-      res.status(500).send(message: e)
-    # feed our data to the handler
-    handler.stdin.end stdinString
+    stdinfileStream.pipe handler.stdin
     handler.on 'close', (exitCode, signal) ->
-      #handler.stdin.removeAllListeners 'error'
-      log.debug "command completed exit code #{exitCode}"
+      log.debug "command (#{pathToHandler}) completed exit code #{exitCode}"
       if exitCode != 0 || err || signal
         res.status 500
         res.write '{"message":"'
@@ -117,10 +128,13 @@ handleRequest = (req,res) ->
     # when our response is finished (we've sent all we will send)
     # we clean up after ourselves
     new Promise (resolve, reject) ->
-      res.on 'finish', () -> resolve([errfileStream.path, outfileStream.path])
-  .spread (errfilePath, outfilePath) ->
-    fs.unlink(outfilePath, (e) -> log.warn(e) if e)
-    fs.unlink(errfilePath, (e) -> log.warn(e) if e)
+      res.on 'finish', () -> resolve([stdinfileStream.path, errfileStream.path, outfileStream.path])
+  .spread (stdinfilePath, errfilePath, outfilePath) ->
+    # I really want to pack all these up and keep 'em for reference
+    #fs.unlink(stdinfilePath, (e) -> log.warn(e) if e)
+    #fs.unlink(outfilePath, (e) -> log.warn(e) if e)
+    #fs.unlink(errfilePath, (e) -> log.warn(e) if e)
+    console.log "done"
   .catch (e) ->
     log.error "something awful happened #{e}\n#{e.stack}"
     res.end "something awful happend: " + e
