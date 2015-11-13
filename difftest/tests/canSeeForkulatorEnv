@@ -1,2 +1,2 @@
 #! /usr/bin/env bash
-curl http://localhost:3000/canSeeForkulatorEnv --silent
+curl http://localhost:3000/canSeeForkulatorEnv --silent | sed -e "s[$(pwd)[[g"

@@ -1,5 +1,6 @@
 { url: '/requestHandler.js',
-  query: {},
+  query: null,
+  body: null,
   headers: 
    { host: 'localhost:3000',
      accept: '*/*',

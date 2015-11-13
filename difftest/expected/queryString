@@ -6,6 +6,8 @@
     "host": "localhost:3000"
   },
   "body": null,
-  "query": null,
-  "url": "/echoStdin"
+  "query": {
+    "super": "pants"
+  },
+  "url": "/echoStdin?super=pants"
 }

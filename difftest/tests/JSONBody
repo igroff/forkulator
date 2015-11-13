@@ -1,0 +1,2 @@
+#! /usr/bin/env bash
+curl http://localhost:3000/echoStdin -H 'User-Agent: test pants' -H 'Content-Type: application/json' --data '{"some":"data"}' --silent | jq .
