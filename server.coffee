@@ -105,8 +105,7 @@ handleRequest = (req,res) ->
   returnWhen = (object, theseComplete) ->
     Promise.props(_.extend(object, theseComplete))
 
-  Promise.resolve({})
-  .then (context) -> returnWhen(context, pathToHandler: path.join(config.commandPath, req.path))
+  Promise.resolve(pathToHandler: path.join(config.commandPath, req.path))
   .then (context) -> returnWhen(context, stdinfileStream: openForWrite(createTempFilePath 'stdin'))
   .then (context) -> returnWhen(context, stdinWriteStream: writeAndClose(stdinString, context.stdinfileStream))
   .then (c) ->
