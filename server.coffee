@@ -106,32 +106,30 @@ handleRequest = (req,res) ->
     Promise.props(_.extend(object, theseComplete))
 
   Promise.resolve({})
+  .then (context) -> returnWhen(context, pathToHandler: path.join(config.commandPath, req.path))
   .then (context) -> returnWhen(context, stdinfileStream: openForWrite(createTempFilePath 'stdin'))
   .then (context) -> returnWhen(context, stdinWriteStream: writeAndClose(stdinString, context.stdinfileStream))
   .then (c) ->
-    theseAreDone =
-      stdinfileStream:openForRead(c.stdinWriteStream.path)
+    whenTheseAreDone =
+      stdinfileStream: openForRead(c.stdinWriteStream.path)
       outfileStream: openForWrite(createTempFilePath 'stdout-')
       errfileStream: openForWrite(createTempFilePath 'stderr-')
-    returnWhen(c, theseAreDone)
+    returnWhen(c, whenTheseAreDone)
   .then (context) ->
-    stdinfileStream = context.stdinfileStream
-    outfileStream = context.outfileStream
-    errfileStream = context.errfileStream
-    log.debug 'starting process: %s', pathToHandler
-    handler = child_process.spawn(pathToHandler, [], stdio: ['pipe', outfileStream, errfileStream])
+    log.debug 'starting process: %s', context.pathToHandler
+    handler = child_process.spawn(context.pathToHandler, [], stdio: ['pipe', context.outfileStream, context.errfileStream])
     handler.on 'error', (e) -> err = e
-    stdinfileStream.pipe handler.stdin
+    context.stdinfileStream.pipe handler.stdin
     handler.on 'close', (exitCode, signal) ->
-      log.debug "command (#{pathToHandler}) completed exit code #{exitCode}"
+      log.debug "command (#{context.pathToHandler}) completed exit code #{exitCode}"
       if exitCode != 0 || err || signal
         res.status 500
         res.write '{"message":"'
         res.write err + "" if err
         res.write "killed by signal" + signal if signal
-        errStream = fs.createReadStream errfileStream.path
+        errStream = fs.createReadStream context.errfileStream.path
         errStream.on 'error', (e) -> res.write 'error reading stderr from the command ' + e + '\\n'
-        outStream = fs.createReadStream outfileStream.path
+        outStream = fs.createReadStream context.outfileStream.path
         outStream.on 'error', (e) -> res.write 'error reading stdout from the command ' + e + '\\n'
         errStream.pipe(createStreamTransform()).pipe(res, end: false)
         outStream.pipe(createStreamTransform()).pipe(res, end: false)
@@ -139,11 +137,11 @@ handleRequest = (req,res) ->
           .then(promiseToEnd(outStream))
           .then( -> res.end('"}'))
       else
-        fs.createReadStream(outfileStream.path).pipe(res)
+        fs.createReadStream(context.outfileStream.path).pipe(res)
     # when our response is finished (we've sent all we will send)
     # we clean up after ourselves
     new Promise (resolve, reject) ->
-      res.on 'finish', () -> resolve([stdinfileStream.path, errfileStream.path, outfileStream.path])
+      res.on 'finish', () -> resolve([context.stdinfileStream.path, context.errfileStream.path, context.outfileStream.path])
   .spread (stdinfilePath, errfilePath, outfilePath) ->
     # I really want to pack all these up and keep 'em for reference
     #fs.unlink(stdinfilePath, (e) -> log.warn(e) if e)
