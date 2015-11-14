@@ -64,6 +64,9 @@ waitForEvent = (resolveEvent, emitter, rejectEvent='error') ->
 promiseToEnd = (stream) ->
   waitForEvent 'end', stream
 
+promiseToClose = (emitter) ->
+  waitForEvent 'close', emitter
+
 openForWrite = (path) ->
   waitForEvent 'open', fs.createWriteStream(path)
 
@@ -99,10 +102,22 @@ handleRequest = (req,res) ->
       log.debug "#{message} #{util.inspect(thing)}"
       Promise.resolve(thing)
 
-  openForWrite(createTempFilePath 'stdin-')
-  .then (stdinfileStream) -> writeAndClose(stdinString, stdinfileStream)
-  .then((stdinWriteStream) -> Promise.all [openForRead(stdinWriteStream.path), openForWrite(createTempFilePath 'stdout-'), openForWrite(createTempFilePath 'stderr-')])
-  .spread (stdinfileStream, outfileStream, errfileStream) ->
+  returnWhen = (object, theseComplete) ->
+    Promise.props(_.extend(object, theseComplete))
+
+  Promise.resolve({})
+  .then (context) -> returnWhen(context, stdinfileStream: openForWrite(createTempFilePath 'stdin'))
+  .then (context) -> returnWhen(context, stdinWriteStream: writeAndClose(stdinString, context.stdinfileStream))
+  .then (c) ->
+    theseAreDone =
+      stdinfileStream:openForRead(c.stdinWriteStream.path)
+      outfileStream: openForWrite(createTempFilePath 'stdout-')
+      errfileStream: openForWrite(createTempFilePath 'stderr-')
+    returnWhen(c, theseAreDone)
+  .then (context) ->
+    stdinfileStream = context.stdinfileStream
+    outfileStream = context.outfileStream
+    errfileStream = context.errfileStream
     log.debug 'starting process: %s', pathToHandler
     handler = child_process.spawn(pathToHandler, [], stdio: ['pipe', outfileStream, errfileStream])
     handler.on 'error', (e) -> err = e
