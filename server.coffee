@@ -97,11 +97,6 @@ handleRequest = (req,res) ->
     headers: req.headers
     path: req.path
 
-  logit = (message) ->
-    (thing) ->
-      log.debug "#{message} #{util.inspect(thing)}"
-      Promise.resolve(thing)
-
   returnWhen = (object, theseComplete) ->
     Promise.props(_.extend(object, theseComplete))
 
