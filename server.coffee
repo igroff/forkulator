@@ -61,29 +61,6 @@ waitForEvent = (resolveEvent, emitter, rejectEvent='error') ->
     emitter.on resolveEvent, () -> resolve(emitter)
     emitter.on(rejectEvent, reject) if rejectEvent
 
-resolveWithEvent = (context, eventName, emitter, params=null, rejectEvent='error') ->
-  new Promise((resolve, reject) ->
-    if _.isArray eventName
-      console.log "hooking #{eventName}"
-      _.each(eventName, (n) ->
-        emitter.on(n, () ->
-          if params
-            resolve(_.extend(context, _.zipObject(params, arguments)))
-          else
-            resolve.apply(this, arguments)
-        )
-      )
-    else
-      emitter.on(eventName, () ->
-        if params
-          resolve(_.extend(context, _.zipObject(params, arguments)))
-        else
-          resolve.apply(this, arguments)
-      )
-    console.log "hooking #{rejectEvent}"
-    emitter.on('error', (e) -> reject(e))
-  )
-
 promiseToEnd = (stream) ->
   waitForEvent 'end', stream
 
@@ -136,39 +113,35 @@ handleRequest = (req,res) ->
   .then (context) ->
     log.debug 'starting process: %s', context.commandFilePath
     commandProcess = child_process.spawn(context.commandFilePath, [], stdio: ['pipe', context.outfileStream, context.errfileStream])
-    console.log util.inspect(commandProcess.stdin)
-    commandProcess.on 'error', console.log
-    commandProcess.on 'exit', console.log
-
-    #context.stdinfileStream.pipe commandProcess.stdin
-    resolveWithEvent(context, ['close', 'exit'], commandProcess, ['exitCode', 'signal'])
+    context.stdinfileStream.pipe commandProcess.stdin
+    new Promise (resolve, reject) ->
+      # When the process completes and closes all the stdio stream
+      # associated with it, we'll get a close
+      commandProcess.on 'close', (exitCode, signal) ->
+        context.exitCode = exitCode
+        context.signal = signal
+        resolve(context)
+      commandProcess.on 'error', reject
+      # if the process failes to start, in certain cases, we can get an error
+      # writing to stdin
+      commandProcess.stdin.on 'error', reject
   .then (context) ->
-      log.debug "command (#{context.commandFilePath}) completed exit code #{context.exitCode}"
-      if context.exitCode != 0 || context.signal
-        res.status 500
-        res.write '{"message":"'
-        res.write "killed by signal" + context.signal if context.signal
-        errStream = fs.createReadStream context.errfileStream.path
-        errStream.on 'error', (e) -> res.write 'error reading stderr from the command ' + e + '\\n'
-        outStream = fs.createReadStream context.outfileStream.path
-        outStream.on 'error', (e) -> res.write 'error reading stdout from the command ' + e + '\\n'
-        errStream.pipe(createStreamTransform()).pipe(res, end: false)
-        outStream.pipe(createStreamTransform()).pipe(res, end: false)
-        promiseToEnd(errStream)
-          .then(promiseToEnd(outStream))
-          .then( -> res.write('"}'))
-      else
-        fs.createReadStream(context.outfileStream.path).pipe(res)
-      # when our response is finished (we've sent all we will send)
-      # we clean up after ourselves
-      new Promise (resolve, reject) ->
-        res.on 'finish', () -> resolve([context.stdinfileStream.path, context.errfileStream.path, context.outfileStream.path])
-  .spread (stdinfilePath, errfilePath, outfilePath) ->
-    # I really want to pack all these up and keep 'em for reference
-    #fs.unlink(stdinfilePath, (e) -> log.warn(e) if e)
-    #fs.unlink(outfilePath, (e) -> log.warn(e) if e)
-    #fs.unlink(errfilePath, (e) -> log.warn(e) if e)
-    console.log "done"
+    log.debug "command (#{context.commandFilePath}) completed exit code #{context.exitCode}"
+    if context.exitCode != 0 || context.signal
+      res.status 500
+      res.write '{"message":"'
+      res.write "killed by signal" + context.signal if context.signal
+      errStream = fs.createReadStream context.errfileStream.path
+      errStream.on 'error', (e) -> res.write 'error reading stderr from the command ' + e + '\\n'
+      outStream = fs.createReadStream context.outfileStream.path
+      outStream.on 'error', (e) -> res.write 'error reading stdout from the command ' + e + '\\n'
+      errStream.pipe(createStreamTransform()).pipe(res, end: false)
+      outStream.pipe(createStreamTransform()).pipe(res, end: false)
+      Promise.join(promiseToEnd(errStream), promiseToEnd(outStream)).then(res.write('"}'))
+    else
+      commandOutputStream = fs.createReadStream(context.outfileStream.path)
+      commandOutputStream.pipe(res)
+      promiseToEnd commandOutputStream
   .catch (e) ->
     log.error "something awful happened #{e}\n#{e.stack}"
     res.write "something awful happend: " + e
