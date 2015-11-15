@@ -29,8 +29,8 @@ requestCounter = 0
 # used to count active requests so throttling, if desired, can be done
 countOfCurrentlyExecutingRequests = 0
 
-createTempFileName = (prefix) ->
-  prefix + process.pid + requestCounter + ""
+createTempFileName = (suffix) ->
+  process.pid + requestCounter + "-" + suffix
 
 createTempFilePath = (prefix) ->
   path.join config.outputDirectory, createTempFileName(prefix)
@@ -96,8 +96,8 @@ handleRequest = (req,res) ->
   .then (c) ->
     whenTheseAreDone =
       stdinfileStream: openForRead(c.stdinWriteStream.path)
-      outfileStream: openForWrite(createTempFilePath 'stdout-')
-      errfileStream: openForWrite(createTempFilePath 'stderr-')
+      outfileStream: openForWrite(createTempFilePath 'stdout')
+      errfileStream: openForWrite(createTempFilePath 'stderr')
     returnWhen(c, whenTheseAreDone)
   .then (context) ->
     log.debug 'starting process: %s', context.commandFilePath
