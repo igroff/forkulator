@@ -59,7 +59,30 @@ app.use((req, res, next) -> executeThrottled(req, res))
 waitForEvent = (resolveEvent, emitter, rejectEvent='error') ->
   new Promise (resolve, reject) ->
     emitter.on resolveEvent, () -> resolve(emitter)
-    emitter.on rejectEvent, reject if rejectEvent
+    emitter.on(rejectEvent, reject) if rejectEvent
+
+resolveWithEvent = (context, eventName, emitter, params=null, rejectEvent='error') ->
+  new Promise((resolve, reject) ->
+    if _.isArray eventName
+      console.log "hooking #{eventName}"
+      _.each(eventName, (n) ->
+        emitter.on(n, () ->
+          if params
+            resolve(_.extend(context, _.zipObject(params, arguments)))
+          else
+            resolve.apply(this, arguments)
+        )
+      )
+    else
+      emitter.on(eventName, () ->
+        if params
+          resolve(_.extend(context, _.zipObject(params, arguments)))
+        else
+          resolve.apply(this, arguments)
+      )
+    console.log "hooking #{rejectEvent}"
+    emitter.on('error', (e) -> reject(e))
+  )
 
 promiseToEnd = (stream) ->
   waitForEvent 'end', stream
@@ -79,7 +102,7 @@ writeAndClose = (data, stream) ->
 
 handleRequest = (req,res) ->
   err = null
-  pathToHandler = path.join config.commandPath, req.path
+  commandFilePath = path.join config.commandPath, req.path
   #
   # we're gonna do our best to return json in all cases
   res.type('application/json')
@@ -90,19 +113,20 @@ handleRequest = (req,res) ->
       null,
       autoDestroy: false
 
-  stdinString = JSON.stringify
-    url: req.url
-    query: if _.isEmpty(req.query) then null else req.query
-    body: if _.isEmpty(req.body) then null else req.body
-    headers: req.headers
-    path: req.path
-
   returnWhen = (object, theseComplete) ->
     Promise.props(_.extend(object, theseComplete))
 
-  Promise.resolve(pathToHandler: path.join(config.commandPath, req.path))
+  Promise.resolve(commandFilePath: path.join(config.commandPath, req.path))
+  .then (context) -> returnWhen(context,
+    requestData:
+      url: req.url
+      query: if _.isEmpty(req.query) then null else req.query
+      body: if _.isEmpty(req.body) then null else req.body
+      headers: req.headers
+      path: req.path
+    )
   .then (context) -> returnWhen(context, stdinfileStream: openForWrite(createTempFilePath 'stdin'))
-  .then (context) -> returnWhen(context, stdinWriteStream: writeAndClose(stdinString, context.stdinfileStream))
+  .then (context) -> returnWhen(context, stdinWriteStream: writeAndClose(JSON.stringify(context.requestData), context.stdinfileStream))
   .then (c) ->
     whenTheseAreDone =
       stdinfileStream: openForRead(c.stdinWriteStream.path)
@@ -110,17 +134,20 @@ handleRequest = (req,res) ->
       errfileStream: openForWrite(createTempFilePath 'stderr-')
     returnWhen(c, whenTheseAreDone)
   .then (context) ->
-    log.debug 'starting process: %s', context.pathToHandler
-    handler = child_process.spawn(context.pathToHandler, [], stdio: ['pipe', context.outfileStream, context.errfileStream])
-    handler.on 'error', (e) -> err = e
-    context.stdinfileStream.pipe handler.stdin
-    handler.on 'close', (exitCode, signal) ->
-      log.debug "command (#{context.pathToHandler}) completed exit code #{exitCode}"
-      if exitCode != 0 || err || signal
+    log.debug 'starting process: %s', context.commandFilePath
+    commandProcess = child_process.spawn(context.commandFilePath, [], stdio: ['pipe', context.outfileStream, context.errfileStream])
+    console.log util.inspect(commandProcess.stdin)
+    commandProcess.on 'error', console.log
+    commandProcess.on 'exit', console.log
+
+    #context.stdinfileStream.pipe commandProcess.stdin
+    resolveWithEvent(context, ['close', 'exit'], commandProcess, ['exitCode', 'signal'])
+  .then (context) ->
+      log.debug "command (#{context.commandFilePath}) completed exit code #{context.exitCode}"
+      if context.exitCode != 0 || context.signal
         res.status 500
         res.write '{"message":"'
-        res.write err + "" if err
-        res.write "killed by signal" + signal if signal
+        res.write "killed by signal" + context.signal if context.signal
         errStream = fs.createReadStream context.errfileStream.path
         errStream.on 'error', (e) -> res.write 'error reading stderr from the command ' + e + '\\n'
         outStream = fs.createReadStream context.outfileStream.path
@@ -129,13 +156,13 @@ handleRequest = (req,res) ->
         outStream.pipe(createStreamTransform()).pipe(res, end: false)
         promiseToEnd(errStream)
           .then(promiseToEnd(outStream))
-          .then( -> res.end('"}'))
+          .then( -> res.write('"}'))
       else
         fs.createReadStream(context.outfileStream.path).pipe(res)
-    # when our response is finished (we've sent all we will send)
-    # we clean up after ourselves
-    new Promise (resolve, reject) ->
-      res.on 'finish', () -> resolve([context.stdinfileStream.path, context.errfileStream.path, context.outfileStream.path])
+      # when our response is finished (we've sent all we will send)
+      # we clean up after ourselves
+      new Promise (resolve, reject) ->
+        res.on 'finish', () -> resolve([context.stdinfileStream.path, context.errfileStream.path, context.outfileStream.path])
   .spread (stdinfilePath, errfilePath, outfilePath) ->
     # I really want to pack all these up and keep 'em for reference
     #fs.unlink(stdinfilePath, (e) -> log.warn(e) if e)
@@ -144,7 +171,11 @@ handleRequest = (req,res) ->
     console.log "done"
   .catch (e) ->
     log.error "something awful happened #{e}\n#{e.stack}"
-    res.end "something awful happend: " + e
+    res.write "something awful happend: " + e
+  .error (e) ->
+    log.error "something awful happened #{e}\n#{e.stack}"
+    res.write "something awful happend: " + e
+  .finally () -> res.end()
     
 listenPort = process.env.PORT || 3000
 log.info "starting app " + process.env.APP_NAME
