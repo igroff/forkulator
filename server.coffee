@@ -64,9 +64,6 @@ waitForEvent = (resolveEvent, emitter, rejectEvent='error') ->
 promiseToEnd = (stream) ->
   waitForEvent 'end', stream
 
-promiseToClose = (emitter) ->
-  waitForEvent 'close', emitter
-
 openForWrite = (path) ->
   waitForEvent 'open', fs.createWriteStream(path)
 
@@ -77,10 +74,11 @@ writeAndClose = (data, stream) ->
   stream.end data
   waitForEvent 'close', stream
 
+returnWhen = (object, theseComplete) ->
+  Promise.props(_.extend(object, theseComplete))
+
 handleRequest = (req,res) ->
   err = null
-  commandFilePath = path.join config.commandPath, req.path
-  #
   # we're gonna do our best to return json in all cases
   res.type('application/json')
 
@@ -90,8 +88,6 @@ handleRequest = (req,res) ->
       null,
       autoDestroy: false
 
-  returnWhen = (object, theseComplete) ->
-    Promise.props(_.extend(object, theseComplete))
 
   Promise.resolve(commandFilePath: path.join(config.commandPath, req.path))
   .then (context) -> returnWhen(context,
