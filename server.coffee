@@ -23,12 +23,6 @@ config=
   maxConcurrentRequests: process.env.MAX_CONCURRENCY || 5
   commandPath: process.env.COMMAND_PATH || path.join __dirname, "commands"
 
-app = express()
-app.use connect()
-# simply parse all bodies as string so we can pass whatever it
-# is to the command
-app.use body_parser.text(type: () -> true)
-app.use morgan('combined')
 
 # used to uniquely identify requests throughout the lifetime of forkulator
 requestCounter = 0
@@ -54,7 +48,6 @@ executeThrottled = (req, res) ->
     log.warn "too busy to handle request"
     res.status(503).send(message: "too busy, try again later").end()
 
-app.use((req, res, next) -> executeThrottled(req, res))
 
 waitForEvent = (resolveEvent, emitter, rejectEvent='error') ->
   new Promise (resolve, reject) ->
@@ -146,6 +139,14 @@ handleRequest = (req,res) ->
     res.write "something awful happend: " + e
   .finally () -> res.end()
     
+app = express()
+app.use connect()
+# simply parse all bodies as string so we can pass whatever it
+# is to the command
+app.use body_parser.text(type: () -> true)
+app.use morgan('combined')
+app.use((req, res, next) -> executeThrottled(req, res))
+
 listenPort = process.env.PORT || 3000
 log.info "starting app " + process.env.APP_NAME
 log.info "listening on " + listenPort
