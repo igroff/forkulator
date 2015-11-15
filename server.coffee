@@ -130,7 +130,7 @@ handleRequest = (req,res) ->
     else
       commandOutputStream = fs.createReadStream(context.outfileStream.path)
       commandOutputStream.pipe(res)
-      promiseToEnd commandOutputStream
+      promiseToEnd(commandOutputStream)
   .catch (e) ->
     log.error "something awful happened #{e}\n#{e.stack}"
     res.write "something awful happend: " + e
