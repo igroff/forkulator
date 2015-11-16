@@ -1,13 +1,13 @@
 {
-  "path": "/echoStdin",
-  "headers": {
-    "content-length": "15",
-    "content-type": "application/json",
-    "user-agent": "test pants",
-    "accept": "*/*",
-    "host": "localhost:3000"
-  },
-  "body": "{\"some\":\"data\"}",
+  "url": "/echoStdin",
   "query": null,
-  "url": "/echoStdin"
+  "body": "{\"some\":\"data\"}",
+  "headers": {
+    "host": "localhost:3000",
+    "accept": "*/*",
+    "user-agent": "test pants",
+    "content-type": "application/json",
+    "content-length": "15"
+  },
+  "path": "/echoStdin"
 }

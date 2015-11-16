@@ -1,0 +1,3 @@
+#! /usr/bin/env bash
+# the output order of the stdio streams is nondeterministic
+curl http://localhost:3000/nonzeroExitCodeOutputOnStdinAndOut --silent --write-out '\nhttp status: %{http_code}'

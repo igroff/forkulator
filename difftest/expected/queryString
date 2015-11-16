@@ -1,13 +1,13 @@
 {
-  "path": "/echoStdin",
-  "headers": {
-    "user-agent": "test pants",
-    "accept": "*/*",
-    "host": "localhost:3000"
-  },
-  "body": null,
+  "url": "/echoStdin?super=pants",
   "query": {
     "super": "pants"
   },
-  "url": "/echoStdin?super=pants"
+  "body": null,
+  "headers": {
+    "host": "localhost:3000",
+    "accept": "*/*",
+    "user-agent": "test pants"
+  },
+  "path": "/echoStdin"
 }
