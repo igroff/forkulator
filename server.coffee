@@ -83,6 +83,7 @@ handleRequest = (req,res) ->
 
   context =
     commandFilePath: path.join(config.commandPath, req.path)
+    commandPath: req.path
     requestData:
       url: req.url
       query: if _.isEmpty(req.query) then null else req.query
@@ -110,10 +111,10 @@ handleRequest = (req,res) ->
         context.exitCode = exitCode
         context.signal = signal
         resolve(context)
-      commandProcess.on 'error', reject
+      commandProcess.on 'error', (e) -> log.error "error from commandProcess: #{util.inspect e}";  reject(e)
       # if the process failes to start, in certain cases, we can get an error
       # writing to stdin
-      commandProcess.stdin.on 'error', reject
+      commandProcess.stdin.on 'error', (e) -> log.error "error from commandProcess.stdin: #{e}";  reject(e)
   .then (context) ->
     log.debug "command (#{context.commandFilePath}) completed exit code #{context.exitCode}"
     if context.exitCode != 0 || context.signal
@@ -133,11 +134,12 @@ handleRequest = (req,res) ->
       commandOutputStream.pipe(res)
       promiseToEnd(commandOutputStream)
   .catch (e) ->
-    log.error "something awful happened #{e}\n#{e.stack}"
-    res.write "something awful happend: " + e
-  .error (e) ->
-    log.error "something awful happened #{e}\n#{e.stack}"
-    res.write "something awful happend: " + e
+    if e.code is 'ENOENT' and e.path is context.commandFilePath
+      log.warn "No command found for #{context.commandPath}"
+      res.status(404)
+    else
+      log.error "something awful happened #{e}\n#{e.stack}"
+      res.write "something awful happend: " + e
   .finally () -> res.end()
     
 app = express()
