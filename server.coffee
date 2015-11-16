@@ -117,6 +117,7 @@ handleRequest = (req,res) ->
   .then (context) ->
     log.debug "command (#{context.commandFilePath}) completed exit code #{context.exitCode}"
     if context.exitCode != 0 || context.signal
+      res.status 500
       res.write "{\"exitCode\":#{context.exitCode},\"signal\":\"#{context.signal}\",\"output\":\""
       errStream = fs.createReadStream context.errfileStream.path
       outStream = fs.createReadStream context.outfileStream.path

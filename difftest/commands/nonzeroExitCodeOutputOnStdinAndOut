@@ -1,0 +1,4 @@
+#! /usr/bin/env bash
+echo "this is some output"
+echo "this is some output" >&2
+exit 1
