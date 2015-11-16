@@ -8,7 +8,7 @@ Enter `forkulator` the application that just runs your executable files and retu
 #### Definitions
 
 * command - A command is an executable file that is to be executed by forkulator. Command files
-  must be executable `chmod +x`'d and stored in the location specified by the `COMMAND_PATH`
+  must be executable (`chmod +x`'d) and stored in the location specified by the `COMMAND_PATH`
   environment variable.
 * command path - Full path to the directory holding forkulator commands.
 
