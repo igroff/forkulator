@@ -49,7 +49,8 @@ Next the output from the of invocation of the `echoStdin` command:
         $ curl 'http://localhost:3000/echoStdin' --silent | jq .
         {
           "url": "/echoStdin",
-          "query": {},
+          "query": null,
+          "body": null,
           "headers": {
             "user-agent": "curl/7.37.1",
             "host": "localhost:3000",
@@ -62,14 +63,15 @@ You can even put your commands in a directory within the configured command path
 
         $ curl 'http://localhost:3000/subdir/echoStdin' --silent | jq .
         {
-          "url": "/subdir/echoStdin",
-          "query": {},
+          "url": "/echoStdin",
+          "query": null,
+          "body": null,
           "headers": {
             "user-agent": "curl/7.37.1",
             "host": "localhost:3000",
             "accept": "*/*"
           },
-          "path": "/subdir/echoStdin"
+          "path": "/echoStdin"
         }
 
 If your command exits with a non zero exit code:
