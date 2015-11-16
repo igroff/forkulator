@@ -91,15 +91,25 @@ handleRequest = (req,res) ->
       headers: req.headers
       path: req.path
 
+  # we start by 'passing in' our context to the promise chain
   Promise.resolve(context)
+  # then we're going to open the file that will contain the information
+  # we'll be passing to the command via stdin
   .then (context) -> returnWhen(context, stdinfileStream: openForWrite(createTempFilePath 'stdin'))
+  # and now we write our data to the stdin file
   .then (context) -> returnWhen(context, stdinWriteStream: writeAndClose(JSON.stringify(context.requestData), context.stdinfileStream))
+  # We'll be opening all the files that will comprise the stdio data for use by the
+  # command on execution.  Child_process requires that any stream objects it uses
+  # already have an FD available when spawn is called so we must wait for those
+  # to emit the 'open' event before we can spawn our command process
   .then (context) ->
     whenTheseAreDone =
       stdinfileStream: openForRead(context.stdinWriteStream.path)
       outfileStream: openForWrite(createTempFilePath 'stdout')
       errfileStream: openForWrite(createTempFilePath 'stderr')
     returnWhen(context, whenTheseAreDone)
+  # now we fire up the command process as requested, piping in the 
+  # request data we have via stdin
   .then (context) ->
     log.debug 'starting process: %s', context.commandFilePath
     commandProcess = child_process.spawn(context.commandFilePath, [], stdio: ['pipe', context.outfileStream, context.errfileStream])
@@ -116,6 +126,9 @@ handleRequest = (req,res) ->
       # writing to stdin
       commandProcess.stdin.on 'error', (e) -> log.error "error from commandProcess.stdin: #{e}";  reject(e)
   .then (context) ->
+    # the command execution is complete when we get the 'close' event from commandProcess
+    # in the case of error we'll be passing back all the information we have from the close event
+    # along with the contents of stderr and stdout generated during command execution
     log.debug "command (#{context.commandFilePath}) completed exit code #{context.exitCode}"
     if context.exitCode != 0 || context.signal
       res.status 500
@@ -134,12 +147,20 @@ handleRequest = (req,res) ->
       commandOutputStream.pipe(res)
       promiseToEnd(commandOutputStream)
   .catch (e) ->
+    # first we check to see if we really just have a request for a non
+    # existent command, in which case we'll return a 404
     if e.code is 'ENOENT' and e.path is context.commandFilePath
       log.warn "No command found for #{context.commandPath}"
       res.status(404)
     else
       log.error "something awful happened #{e}\n#{e.stack}"
-      res.write "something awful happend: " + e
+      errorObject=
+        message: "error"
+        error: e.message
+      console.log util.inspect(e)
+      if req.query["debug"]
+        errorObject.stack = e.stack
+      res.send(errorObject)
   .finally () -> res.end()
     
 app = express()

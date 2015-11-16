@@ -74,6 +74,11 @@ You can even put your commands in a directory within the configured command path
           "path": "/echoStdin"
         }
 
+Upon successful execution of your command, everything written to stdout during
+command execution is streamed back in the response.  Forkulator will always set 
+the Content-Type header to 'application/json', however it is up to your command
+to output properly formatted JSON.
+
 So what's it look like if your command exits with a non zero exit code?
 
 Given a command called nonzeroExitCodeAndOutput that looks like:
