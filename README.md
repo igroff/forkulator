@@ -74,5 +74,26 @@ You can even put your commands in a directory within the configured command path
           "path": "/echoStdin"
         }
 
-If your command exits with a non zero exit code:
+So what's it look like if your command exits with a non zero exit code?
+
+Given a command called nonzeroExitCodeAndOutput that looks like:
+
+      #! /usr/bin/env bash
+      echo "This message was written to stdout"
+      echo -n "This message was written to stderr" >&2
+      exit 1
+
+Running it should go something like this:
+
+      $ curl http://localhost:3000/nonzeroExitCodeAndOutput --silent | jq .
+      {
+        "exitCode": 1,
+        "signal": "null",
+        "output": "This message was written to stderrThis message was written to stdout\n"
+      }
+
+*NOTE* The output from a failed command will contain both the contents of the stderr and stdout
+io streams resulting from the execution of your command. The contents of these streams are themselves
+streamed back in the response and thus come back in *NO PARTICULAR ORDER* so it's up to the caller
+to make sense of which stream is which if that's pertinent.
 
