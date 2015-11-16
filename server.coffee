@@ -81,8 +81,11 @@ handleRequest = (req,res) ->
       null,
       autoDestroy: false
 
+  context =
+    commandFilePath: path.join(config.commandPath, req.path)
+    errorMessage: ''
 
-  Promise.resolve(commandFilePath: path.join(config.commandPath, req.path))
+  Promise.resolve(context)
   .then (context) -> returnWhen(context,
     requestData:
       url: req.url
@@ -117,16 +120,14 @@ handleRequest = (req,res) ->
   .then (context) ->
     log.debug "command (#{context.commandFilePath}) completed exit code #{context.exitCode}"
     if context.exitCode != 0 || context.signal
-      res.status 500
-      res.write '{"message":"'
-      res.write "killed by signal" + context.signal if context.signal
+      res.write "{\"exitCode\":#{context.exitCode},\"signal\":\"#{context.signal}\",\"output\":\""
       errStream = fs.createReadStream context.errfileStream.path
-      errStream.on 'error', (e) -> res.write 'error reading stderr from the command ' + e + '\\n'
       outStream = fs.createReadStream context.outfileStream.path
-      outStream.on 'error', (e) -> res.write 'error reading stdout from the command ' + e + '\\n'
       errStream.pipe(createStreamTransform()).pipe(res, end: false)
       outStream.pipe(createStreamTransform()).pipe(res, end: false)
-      Promise.join(promiseToEnd(errStream), promiseToEnd(outStream)).then(res.write('"}'))
+      Promise.join(promiseToEnd(errStream), promiseToEnd(outStream))
+        .then(() -> res.write('"}'))
+        .then(Promise.resovle)
     else
       commandOutputStream = fs.createReadStream(context.outfileStream.path)
       commandOutputStream.pipe(res)
@@ -142,7 +143,8 @@ handleRequest = (req,res) ->
 app = express()
 app.use connect()
 # simply parse all bodies as string so we can pass whatever it
-# is to the command
+# is to the command, we treat the in and out of the command as 
+# opaque simply feeding in what we get
 app.use body_parser.text(type: () -> true)
 app.use morgan('combined')
 app.use((req, res, next) -> executeThrottled(req, res))
