@@ -192,6 +192,7 @@ handleRequest = (req,res) ->
     
 app = express()
 app.use connect()
+app.use body_parser.json()
 # simply parse all bodies as string so we can pass whatever it
 # is to the command, we treat the in and out of the command as 
 # opaque simply feeding in what we get
