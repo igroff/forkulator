@@ -153,7 +153,7 @@ handleRequest = (req,res) ->
       log.warn "No command found for #{context.commandPath}"
       res.status(404)
     else
-      log.error "something awful happened #{e}\n#{e.stack}"
+      log.error "something awful happened while running #{context.commandPath}\n#{e}\n#{e.stack}"
       errorObject=
         message: "error"
         error: e.message
