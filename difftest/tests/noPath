@@ -1,0 +1,2 @@
+#! /usr/bin/env bash
+curl http://localhost:3000/ -H 'User-Agent: test pants' --silent --write-out '%{http_code}'

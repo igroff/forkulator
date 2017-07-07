@@ -93,6 +93,17 @@ handleRequest = (req,res) ->
 
   # we start by 'passing in' our context to the promise chain
   Promise.resolve(context)
+  .then (context) ->
+    # special case for someone trying to hit /, for which there can never
+    # be a valid command. We're just gonna throw something that looks like the
+    # same error that would be raised in the case of someone calling a more 'valid'
+    # but still no existent path
+    if context.commandPath is "/"
+      err = new Error "Invalid command path: #{context.commandPath}"
+      err.code = "ENOENT"
+      err.path = context.commandFilePath
+      throw err
+    context
   # then we're going to open the file that will contain the information
   # we'll be passing to the command via stdin
   .then (context) -> returnWhen(context, stdinfileStream: openForWrite(createTempFilePath 'stdin'))
@@ -160,7 +171,7 @@ handleRequest = (req,res) ->
       console.log util.inspect(e)
       if req.query["debug"]
         errorObject.stack = e.stack
-      res.send(errorObject)
+      res.status(500).send(errorObject)
   .finally () -> res.end()
     
 app = express()

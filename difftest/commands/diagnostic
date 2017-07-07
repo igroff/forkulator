@@ -1,0 +1,5 @@
+#! /usr/bin/env bash
+# we just need to consume the stdin, so we can avoid the race condition where
+# our forked process ends without the stdin stream being fully piped into it
+DUMP_THIS="$(cat)"
+echo '{"message":"ok"}'
