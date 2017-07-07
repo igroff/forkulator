@@ -65,7 +65,7 @@ openForRead = (path) ->
 
 writeAndClose = (data, stream) ->
   stream.end data
-  waitForEvent 'close', stream
+  waitForEvent 'finish', stream
 
 returnWhen = (object, theseComplete) ->
   Promise.props(_.extend(object, theseComplete))
