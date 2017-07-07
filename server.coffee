@@ -176,5 +176,5 @@ listenPort = process.env.PORT || 3000
 log.info "starting app " + process.env.APP_NAME
 log.info "listening on " + listenPort
 log.debug "debug logging enabled"
-log.debug config
+log.info config
 app.listen listenPort
