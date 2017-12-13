@@ -116,9 +116,11 @@ handleRequest = (req, res) ->
       context
     # then we're going to open the file that will contain the information
     # we'll be passing to the command via stdin
-    .then (context) -> returnWhen(context, stdinfileStream: openForWrite(createTempFilePath 'stdin'))
+    .then (context) ->
+      returnWhen(context, stdinfileStream: openForWrite(createTempFilePath 'stdin'))
     # and now we write our data to the stdin file
-    .then (context) -> returnWhen(context, stdinWriteStream: writeAndClose(JSON.stringify(context.requestData), context.stdinfileStream))
+    .then (context) ->
+      returnWhen(context, stdinWriteStream: writeAndClose(JSON.stringify(context.requestData), context.stdinfileStream))
     # We'll be opening all the files that will comprise the stdio data for use by the
     # command on execution.  Child_process requires that any stream objects it uses
     # already have an FD available when spawn is called so we must wait for those
@@ -178,15 +180,12 @@ handleRequest = (req, res) ->
         errorObject=
           message: "error"
           error: e.message
-        console.log util.inspect(e)
         if req.query["debug"]
           errorObject.stack = e.stack
         res.status(500).send(errorObject)
     .finally () -> res.end()
 
   Promise.using(createDisposableContext(), requestPipeline)
-
-
     
 app = express()
 app.use connect()
