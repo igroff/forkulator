@@ -195,8 +195,8 @@ app.use body_parser.text(type: () -> true)
 app.use((req, res, next) -> executeThrottled(req, res))
 
 listenPort = process.env.PORT || 3000
-log.info "starting app " + process.env.APP_NAME
-log.info "listening on " + listenPort
+log.debug "starting app " + process.env.APP_NAME
+log.debug "listening on " + listenPort
 log.debug "debug logging enabled"
-log.info config
+log.debug config
 app.listen listenPort
