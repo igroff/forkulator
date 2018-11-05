@@ -1,5 +1,4 @@
 express     = require 'express'
-morgan      = require 'morgan'
 connect     = require 'connect'
 log         = require 'simplog'
 path        = require 'path'
@@ -193,7 +192,6 @@ app.use connect()
 # is to the command, we treat the in and out of the command as 
 # opaque simply feeding in what we get
 app.use body_parser.text(type: () -> true)
-app.use morgan('combined')
 app.use((req, res, next) -> executeThrottled(req, res))
 
 listenPort = process.env.PORT || 3000
