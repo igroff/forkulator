@@ -11,6 +11,9 @@ body_parser   = require 'body-parser'
 util          = require 'util'
 stream        = require 'stream'
 
+
+Promise.config({cancellation: true})
+
 dieInAFire = (message, errorCode=1) ->
   log.error message
   process.exit errorCode
@@ -94,6 +97,7 @@ handleRequest = (req, res) ->
     # during disposal we'll go ahead and close any streams we have lying
     # around.
     promiseForContext.disposer (context) ->
+      log.debug "disposing of context"
       context.outfileStream.end() if context.outfileStream?.fd
       context.errfileStream.end() if context.errfileStream?.fd
       fs.close(context.stdinfileStream.fd) if context.stdinfileStream?.fd
@@ -101,7 +105,7 @@ handleRequest = (req, res) ->
 
   requestPipeline = (context) ->
     # we start by 'passing in' our context to the promise chain
-    Promise.resolve(context)
+    promiseToHandleRequest = Promise.resolve(context)
     .then (context) ->
       # special case for someone trying to hit /, for which there can never
       # be a valid command. We're just gonna throw something that looks like the
@@ -183,6 +187,10 @@ handleRequest = (req, res) ->
           errorObject.stack = e.stack
         res.status(500).send(errorObject)
     .finally () -> res.end()
+    res.on "close", () ->
+      log.warn("response closed by client for command #{context.commandPath}")
+      promiseToHandleRequest.cancel()
+    promiseToHandleRequest
 
   Promise.using(createDisposableContext(), requestPipeline)
     
