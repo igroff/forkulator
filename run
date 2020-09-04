@@ -1,0 +1,2 @@
+mkdir -p temp
+./node_modules/.bin/coffee server.coffee
