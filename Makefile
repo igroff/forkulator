@@ -6,7 +6,7 @@ MAX_CONCURRENCY?=1
 export FORKULATOR_TEMP=$(PWD)/temp
 watch:
 	@mkdir -p $(FORKULATOR_TEMP)
-	DEBUG=true COMMAND_PATH=$(COMMAND_PATH) MAX_CONCURRENCY=$(MAX_CONCURRENCY) ./node_modules/.bin/supervisor --watch 'src/,./' --ignore "./test"  -e "litcoffee,coffee,js" --exec make run-server
+	COMMAND_PATH=$(COMMAND_PATH) MAX_CONCURRENCY=$(MAX_CONCURRENCY) ./node_modules/.bin/supervisor --watch 'src/,./' --ignore "./test"  -e "litcoffee,coffee,js" --exec make run-server
 
 lint:
 	find ./src -name '*.coffee' | xargs ./node_modules/.bin/coffeelint -f ./etc/coffeelint.conf

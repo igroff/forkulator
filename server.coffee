@@ -21,6 +21,7 @@ config=
     process.env.TMPDIR || dieInAFire 'I could not find a place to write my output'
   maxConcurrentRequests: process.env.MAX_CONCURRENCY || 5
   commandPath: process.env.COMMAND_PATH || path.join __dirname, "commands"
+  debug: process.env.DEBUG || "false"
 
 
 # used to uniquely identify requests throughout the lifetime of forkulator
@@ -66,6 +67,11 @@ writeAndClose = (data, stream) ->
   stream.end data
   waitForEvent 'finish', stream
 
+logAnyError = (message) ->
+  logCallback = (e) ->
+    if e
+      log.error("#{message} :\n", e)
+
 returnWhen = (object, theseComplete) ->
   Promise.props(theseComplete).then (completed) -> _.extend(object, completed)
 
@@ -97,6 +103,13 @@ handleRequest = (req, res) ->
       context.outfileStream.end() if context.outfileStream?.fd
       context.errfileStream.end() if context.errfileStream?.fd
       fs.close(context.stdinfileStream.fd) if context.stdinfileStream?.fd
+      if config.debug == "false"
+        if context.outfileStream
+          fs.unlink(context.outfileStream.path, logAnyError("Error removing stdout file"))
+        if context.errfileStream
+          fs.unlink(context.errfileStream.path, logAnyError("Error removing stderr file"))
+        if context.stdinfileStream
+          fs.unlink(context.stdinfileStream.path, logAnyError("Error removing stdin file"))
     
 
   requestPipeline = (context) ->
