@@ -11,6 +11,9 @@ body_parser   = require 'body-parser'
 util          = require 'util'
 stream        = require 'stream'
 
+
+Promise.config({cancellation: true})
+
 dieInAFire = (message, errorCode=1) ->
   log.error message
   process.exit errorCode
@@ -21,6 +24,7 @@ config=
     process.env.TMPDIR || dieInAFire 'I could not find a place to write my output'
   maxConcurrentRequests: process.env.MAX_CONCURRENCY || 5
   commandPath: process.env.COMMAND_PATH || path.join __dirname, "commands"
+  debug: process.env.DEBUG || "false"
 
 
 # used to uniquely identify requests throughout the lifetime of forkulator
@@ -66,6 +70,11 @@ writeAndClose = (data, stream) ->
   stream.end data
   waitForEvent 'finish', stream
 
+logAnyError = (message) ->
+  logCallback = (e) ->
+    if e
+      log.error("#{message} :\n", e)
+
 returnWhen = (object, theseComplete) ->
   Promise.props(theseComplete).then (completed) -> _.extend(object, completed)
 
@@ -94,14 +103,22 @@ handleRequest = (req, res) ->
     # during disposal we'll go ahead and close any streams we have lying
     # around.
     promiseForContext.disposer (context) ->
+      log.debug "disposing of context"
       context.outfileStream.end() if context.outfileStream?.fd
       context.errfileStream.end() if context.errfileStream?.fd
       fs.close(context.stdinfileStream.fd) if context.stdinfileStream?.fd
+      if config.debug == "false"
+        if context.outfileStream
+          fs.unlink(context.outfileStream.path, logAnyError("Error removing stdout file"))
+        if context.errfileStream
+          fs.unlink(context.errfileStream.path, logAnyError("Error removing stderr file"))
+        if context.stdinfileStream
+          fs.unlink(context.stdinfileStream.path, logAnyError("Error removing stdin file"))
     
 
   requestPipeline = (context) ->
     # we start by 'passing in' our context to the promise chain
-    Promise.resolve(context)
+    promiseToHandleRequest = Promise.resolve(context)
     .then (context) ->
       # special case for someone trying to hit /, for which there can never
       # be a valid command. We're just gonna throw something that looks like the
@@ -183,6 +200,10 @@ handleRequest = (req, res) ->
           errorObject.stack = e.stack
         res.status(500).send(errorObject)
     .finally () -> res.end()
+    res.on "close", () ->
+      log.warn("response closed by client for command #{context.commandPath}")
+      promiseToHandleRequest.cancel()
+    promiseToHandleRequest
 
   Promise.using(createDisposableContext(), requestPipeline)
     
